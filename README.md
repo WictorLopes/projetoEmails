@@ -112,7 +112,7 @@ http://localhost:5000
 A aplicação está hospedada na plataforma gratuita Vercel.
 
 **Link para a aplicação hospedada:**  
-[https://projeto-emails.vercel.app/](https://projeto-emails.vercel.app/)
+[https://projetoemails.vercel.app/](https://projetoemails.vercel.app/)
 
 ---
 
