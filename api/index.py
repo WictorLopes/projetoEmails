@@ -162,18 +162,40 @@ def generate_fallback_response(category):
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
-        email_text = request.form.get('email_text', '').strip()
+        email_text = ''
+
+        # Verifica se um arquivo foi enviado
+        if 'email_file' in request.files:
+            email_file = request.files['email_file']
+
+            if email_file and email_file.filename != '':
+                filename = email_file.filename.lower()
+
+                if filename.endswith('.txt'):
+                    # Lê o conteúdo do arquivo txt
+                    email_text = email_file.read().decode('utf-8')
+                elif filename.endswith('.pdf'):
+                    # Para PDF, você precisa usar uma biblioteca para extrair texto, ex:
+                    email_text = extract_text_from_pdf(email_file)
+                else:
+                    return render_template('index.html', error="Formato de arquivo não suportado.")
+
+        # Se não enviou arquivo, tenta pegar o texto do textarea
         if not email_text:
-            return render_template('index.html', error="Por favor, insira o texto do email.")
-        start_time = time.time()
+            email_text = request.form.get('email_text', '').strip()
+
+        if not email_text:
+            return render_template('index.html', error="Por favor, insira o texto do email ou envie um arquivo.")
+
+        # Agora processa o texto normalmente
         category = classify_email_gemini(email_text)
         response = generate_gemini_response(category, email_text)
-        processing_time = round(time.time() - start_time, 2)
+
         return render_template('index.html',
                                email_text=email_text,
                                category=category,
-                               response=response,
-                               processing_time=processing_time)
+                               response=response)
+
     else:
         return render_template('index.html')
 
