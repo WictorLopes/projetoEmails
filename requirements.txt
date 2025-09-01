@@ -3,3 +3,4 @@ google-generativeai==0.3.2
 python-dotenv==1.0.0
 nltk==3.8.1
 pypdf2==3.0.1
+vercel-python
