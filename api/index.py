@@ -1,3 +1,8 @@
+import os
+import nltk
+nltk_data_path = os.path.join(os.path.dirname(__file__), '..', 'nltk_data')
+nltk.data.path.append(nltk_data_path)
+
 from flask import Flask, render_template, request, jsonify
 import os
 import PyPDF2
@@ -32,22 +37,6 @@ if not app.config['GEMINI_API_KEY']:
 genai.configure(api_key=app.config['GEMINI_API_KEY'])
 
 GEMINI_MODEL = "models/gemini-1.5-flash-latest"
-
-# Baixar recursos do nltk
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords', quiet=True)
-
-try:
-    nltk.data.find('corpora/wordnet')
-except LookupError:
-    nltk.download('wordnet', quiet=True)
-
-try:
-    nltk.data.find('corpora/omw-1.4')
-except LookupError:
-    nltk.download('omw-1.4', quiet=True)
 
 stop_words = set(stopwords.words('portuguese'))
 lemmatizer = WordNetLemmatizer()
