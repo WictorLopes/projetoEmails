@@ -11,7 +11,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 
 # Serverless adapter para o vercel
-from vercel_python import create_vercel_handler
+# from vercel_python import create_vercel_handler
 
 load_dotenv()
 
@@ -275,7 +275,7 @@ def health_check():
         }), 500
 
 # Handler para o Vercel
-handler = create_vercel_handler(app)
+# handler = create_vercel_handler(app)
 
 # Para desenvolvimento local
 if __name__ == '__main__':
