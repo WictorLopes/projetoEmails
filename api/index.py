@@ -80,6 +80,8 @@ def extract_text_from_txt(txt_file):
 def classify_email_gemini(text):
     # Classificação usando a API
     try:
+        print(f"Tentando classificação com Gemini...")
+        print(f"Chave API: {app.config['GEMINI_API_KEY'][:5]}...")
         # Preparar o prompt para classificação
         prompt = f"""
         Classifique o seguinte e-mail em português como "Produtivo" ou "Improdutivo":
@@ -97,6 +99,10 @@ def classify_email_gemini(text):
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
         
+        print(f"Resposta bruta do Gemini: {response.text}")
+
+
+
         # Processar a resposta
         category = response.text.strip()
         
@@ -105,6 +111,7 @@ def classify_email_gemini(text):
         elif "Improdutivo" in category:
             return 'Improdutivo'
         else:
+            print("Resposta do Gemini não reconhecida, usando fallback")
             return classify_email_fallback(text)
             
     except Exception as e:
