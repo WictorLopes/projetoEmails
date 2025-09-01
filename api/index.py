@@ -232,7 +232,7 @@ def classify():
             # Verificar se é texto JSON
             data = request.get_json()
             if data:
-                email_text = data.get('text', '')
+                email_text = data.get('email_text') or data.get('text') or ''
             else:
                 # Verificar se é form data
                 email_text = request.form.get('email_text', '')
