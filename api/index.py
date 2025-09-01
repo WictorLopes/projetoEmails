@@ -134,6 +134,7 @@ def generate_gemini_response(category, email_text):
     # Geração de resposta usando Gemini API
     try:
         # Preparar o prompt baseado na categoria
+        print(f"Tentando gerar resposta com Gemini para categoria: {category}")
         if category == 'Produtivo':
             prompt = f"""
             Escreva uma resposta profissional e útil em português para o seguinte e-mail, 
@@ -153,8 +154,14 @@ def generate_gemini_response(category, email_text):
             Resposta:
             """
         
+    
+        print(f"Prompt enviado para Gemini: {prompt[:200]}...")  # Debug
+           
+           
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
+        
+        print(f"Resposta bruta do Gemini: {response.text}")  # Debug
         
         return response.text.strip()
         
