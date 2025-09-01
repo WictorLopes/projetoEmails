@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema de Classificação de Emails - IA</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon" />
+</head>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-robot"></i> Classificador de Emails IA</h1>
+            <p>Automatize a classificação e resposta de emails com inteligência artificial</p>
+        </div>
+        
+        <div class="content">
+            <div class="error" id="errorMessage"></div>
+            <div class="success" id="successMessage"></div>
+            
+            <div class="upload-section">
+                <form id="emailForm" method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="email_text"><i class="fas fa-envelope"></i> Cole o texto do email:</label>
+                        <textarea name="email_text" id="email_text" placeholder="Digite ou cole o conteúdo do email aqui...">{{ email_text or '' }}</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email_file"><i class="fas fa-upload"></i> Ou faça upload de arquivo:</label>
+                        <div class="file-input">
+                            <input type="file" name="email_file" id="email_file" accept=".txt,.pdf" />
+                        </div>
+                        <small style="color: var(--secondary); display: block; margin-top: 5px;">
+                            Formatos suportados: .txt, .pdf (até 16MB)
+                        </small>
+                    </div>
+                    
+                    <button type="submit" class="btn" id="submitBtn">
+                        <i class="fas fa-search"></i> Analisar Email
+                    </button>
+                </form>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analisando email com IA. Isso pode levar alguns segundos...</p>
+            </div>
+            
+            {% if email_text %}
+            <div class="text-preview">
+                <h4><i class="fas fa-file-alt"></i> Texto analisado:</h4>
+                <pre>{{ email_text }}</pre>
+            </div>
+            {% endif %}
+            
+            <div class="results" id="results">
+                {% if category %}
+                <div class="result-card">
+                    <h3><i class="fas fa-tag"></i> Categoria do Email</h3>
+                    <div class="category-badge category-{{ category|lower }}" id="categoryBadge">
+                        {{ category }}
+                    </div>
+                </div>
+                
+                <div class="result-card">
+                    <h3><i class="fas fa-reply"></i> Resposta Automática Sugerida</h3>
+                    <div class="response-box" id="responseText">
+                        {{ response }}
+                    </div>
+                    <button class="btn" style="margin-top: 15px;" onclick="copyToClipboard()">
+                        <i class="fas fa-copy"></i> Copiar Resposta
+                    </button>
+                </div>
+                
+                <div class="result-card">
+                    <h3><i class="fas fa-chart-bar"></i> Estatísticas de Análise</h3>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <div class="stat-number" id="wordCount">{{ email_text|wordcount if email_text else 0 }}</div>
+                            <div>Palavras</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="charCount">{{ email_text|length if email_text else 0 }}</div>
+                            <div>Caracteres</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="analysisTime">{{ processing_time if processing_time else 0 }}</div>
+                            <div>Segundos</div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const emailForm = document.getElementById('emailForm');
+            const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            const loadingDiv = document.getElementById('loading');
+            const resultsDiv = document.getElementById('results');
+            const submitBtn = document.getElementById('submitBtn');
+            const confidenceBar = document.getElementById('confidenceBar');
+            
+            {% if category %}
+            resultsDiv.style.display = 'block';
+            setTimeout(() => {
+                confidenceBar.style.width = '85%';
+            }, 500);
+            {% endif %}
+            
+            // Atualizar contadores em tempo real
+            document.getElementById('email_text').addEventListener('input', function() {
+                const text = this.value;
+                document.getElementById('wordCount').textContent = text.split(/\s+/).filter(Boolean).length;
+                document.getElementById('charCount').textContent = text.length;
+            });
+            
+            // Manipular envio do formulário
+            emailForm.addEventListener('submit', function(e) {
+            const emailText = document.getElementById('email_text').value.trim();
+            const emailFile = document.getElementById('email_file').files[0];
+            
+                if (!emailText && !emailFile) {
+                    e.preventDefault();
+                    showError('Por favor, insira o texto do email ou faça upload de um arquivo.');
+                    return;
+                }
+                    
+                loadingDiv.style.display = 'block';
+                resultsDiv.style.display = 'none';
+                errorDiv.style.display = 'none';
+                successDiv.style.display = 'none';
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+            });
+            
+            document.getElementById('email_file').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    // Limpar textarea
+                    document.getElementById('email_text').value = '';
+                    
+                    showSuccess(`Arquivo selecionado: ${file.name}`);
+                }
+            });
+            
+            function showError(message) {
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+                successDiv.style.display = 'none';
+            }
+            
+            function showSuccess(message) {
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+                errorDiv.style.display = 'none';
+            }
+            
+            // Função para copiar resposta
+            window.copyToClipboard = function() {
+                const responseText = document.getElementById('responseText').textContent;
+                navigator.clipboard.writeText(responseText).then(() => {
+                    showSuccess('Resposta copiada para a área de transferência!');
+                }).catch(err => {
+                    showError('Falha ao copiar texto: ' + err);
+                });
+            };
+        });
+    </script>
+</body>
+</html>
