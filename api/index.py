@@ -46,7 +46,9 @@ produtivo_keywords = [
     'suporte', 'atualização', 'dúvida', 'problema', 'erro', 'reclamação', 
     'ajuda', 'solicitação', 'urgente', 'contrato', 'fatura', 'pagamento',
     'cobrança', 'suporte técnico', 'defeito', 'bug', 'sistema', 'login',
-    'senha', 'acesso', 'proposta', 'orçamento', 'projeto', 'prazo'
+    'senha', 'acesso', 'proposta', 'orçamento', 'projeto', 'prazo', 
+    'relatório', 'financeiro', 'trimestre', 'informar', 'gerar', 
+    'solicitação', 'pedido', 'consulta'
 ]
 
 improdutivo_keywords = [
@@ -211,6 +213,7 @@ def classify():
     
     try:
         start_time = time.time()
+        print(f"Texto recebido ({len(email_text)} chars): {email_text[:100]}")
         
         # Verificar se é um upload de arquivo
         if 'file' in request.files:
@@ -246,9 +249,13 @@ def classify():
         
         # Classificar email
         category = classify_email_gemini(email_text)
-        
+
+        print(f"Categoria classificada: {category}")
+
         # Gerar resposta
         response = generate_gemini_response(category, email_text)
+        
+        print(f"Resposta gerada: {response}")
         
         processing_time = round(time.time() - start_time, 2)
         
@@ -262,6 +269,7 @@ def classify():
         })
         
     except Exception as e:
+        print("Erro no endpoint /classify:", str(e))
         return jsonify({
             'error': str(e),
             'success': False
