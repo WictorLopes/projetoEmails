@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="../templates", static_folder="../static")
 
 # Configurações
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -66,7 +66,6 @@ def extract_text_from_pdf(pdf_file):
                 texto_pdf.append(texto)
         return "\n".join(texto_pdf)
     except Exception as e:
-        print(f"Erro ao extrair texto do PDF: {e}")
         raise Exception("Não foi possível extrair texto do arquivo PDF")
 
 def extract_text_from_txt(txt_file):
@@ -74,7 +73,6 @@ def extract_text_from_txt(txt_file):
     try:
         return txt_file.read().decode('utf-8')
     except Exception as e:
-        print(f"Erro ao ler arquivo TXT: {e}")
         raise Exception("Não foi possível ler o arquivo de texto")
 
 def classify_email_gemini(text):
@@ -108,7 +106,6 @@ def classify_email_gemini(text):
             return classify_email_fallback(text)
             
     except Exception as e:
-        print(f"Erro na classificação com Gemini: {e}")
         return classify_email_fallback(text)
 
 def classify_email_fallback(text):
@@ -153,7 +150,6 @@ def generate_gemini_response(category, email_text):
         return response.text.strip()
         
     except Exception as e:
-        print(f"Erro na geração de resposta com Gemini: {e}")
         return generate_fallback_response(category)
 
 def generate_fallback_response(category):
@@ -163,17 +159,23 @@ def generate_fallback_response(category):
     else:
         return "Obrigado pela sua mensagem. Ficamos felizes em saber de você!"
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'POST'])
 def home():
-    return jsonify({
-        'message': 'API de Classificação de Emails',
-        'status': 'online',
-        'endpoints': {
-            '/': 'Esta página',
-            '/classify': 'POST - Classificar email (text/JSON ou arquivo)',
-            '/health': 'GET - Status do serviço'
-        }
-    })
+    if request.method == 'POST':
+        email_text = request.form.get('email_text', '').strip()
+        if not email_text:
+            return render_template('index.html', error="Por favor, insira o texto do email.")
+        start_time = time.time()
+        category = classify_email_gemini(email_text)
+        response = generate_gemini_response(category, email_text)
+        processing_time = round(time.time() - start_time, 2)
+        return render_template('index.html',
+                               email_text=email_text,
+                               category=category,
+                               response=response,
+                               processing_time=processing_time)
+    else:
+        return render_template('index.html')
 
 @app.route('/classify', methods=['POST'])
 def classify():
@@ -268,7 +270,6 @@ def health_check():
 
 # Para desenvolvimento local
 if __name__ == '__main__':
-    print(f"Iniciando aplicação com modelo: {GEMINI_MODEL}")
     app.run(debug=os.getenv('FLASK_DEBUG', 'False').lower() == 'true', 
             host='0.0.0.0', 
             port=5000)
