@@ -213,8 +213,8 @@ def classify():
     
     try:
         start_time = time.time()
-        print(f"Texto recebido ({len(email_text)} chars): {email_text[:100]}")
-        
+        print(f"email_text recebido: {email_text}")
+
         # Verificar se é um upload de arquivo
         if 'file' in request.files:
             email_file = request.files['file']
