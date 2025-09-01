@@ -14,6 +14,9 @@ import re
 import time
 import google.generativeai as genai
 from dotenv import load_dotenv
+import hashlib
+from functools import lru_cache
+from collections import deque
 
 # Serverless adapter para o vercel
 # from vercel_python import create_vercel_handler
@@ -36,7 +39,7 @@ if not app.config['GEMINI_API_KEY']:
 # Configurar a API do Gemini
 genai.configure(api_key=app.config['GEMINI_API_KEY'])
 
-GEMINI_MODEL = "models/gemini-1.5-flash-latest"
+GEMINI_MODEL = "models/gemini-2.0-flash"
 
 stop_words = set(stopwords.words('portuguese'))
 lemmatizer = WordNetLemmatizer()
@@ -56,6 +59,27 @@ improdutivo_keywords = [
     'agradecimento', 'saudações', 'cumprimentos', 'feliz ano novo',
     'boas festas', 'saudação', 'contato futuro', 'mantenha contato'
 ]
+
+# Rate Limiter para evitar exceder quota
+class RateLimiter:
+    def __init__(self, max_requests, time_window):
+        self.max_requests = max_requests
+        self.time_window = time_window
+        self.requests = deque()
+    
+    def allow_request(self):
+        now = time.time()
+        # Remove requests mais antigas que o time_window
+        while self.requests and self.requests[0] < now - self.time_window:
+            self.requests.popleft()
+        
+        if len(self.requests) < self.max_requests:
+            self.requests.append(now)
+            return True
+        return False
+
+# Máximo 48 requests por dia
+gemini_rate_limiter = RateLimiter(max_requests=48, time_window=86400)
 
 def extract_text_from_pdf(pdf_file):
     # Extrair texto de um arquivo PDF
@@ -77,12 +101,22 @@ def extract_text_from_txt(txt_file):
     except Exception as e:
         raise Exception("Não foi possível ler o arquivo de texto")
 
+@lru_cache(maxsize=100)
+def classify_email_gemini_cached(text):
+    # Classificação com cache para evitar chamadas repetidas
+    text_hash = hashlib.md5(text.encode()).hexdigest()
+    print(f"Classificando email (hash: {text_hash[:8]}...)")
+    return classify_email_gemini(text)
+
 def classify_email_gemini(text):
     # Classificação usando a API
     try:
         print(f"Tentando classificação com Gemini...")
-        print(f"Chave API: {app.config['GEMINI_API_KEY'][:5]}...")
-        # Preparar o prompt para classificação
+        
+        if not gemini_rate_limiter.allow_request():
+            print("⚠️  Rate limit próprio atingido para classificação, usando fallback")
+            return classify_email_fallback(text)
+        
         prompt = f"""
         Classifique o seguinte e-mail em português como "Produtivo" ou "Improdutivo":
         
@@ -95,15 +129,9 @@ def classify_email_gemini(text):
         Responda APENAS com "Produtivo" ou "Improdutivo", nada mais.
         """
         
-        # Chamar a API do Gemini com o modelo econômico
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
         
-        print(f"Resposta bruta do Gemini: {response.text}")
-
-
-
-        # Processar a resposta
         category = response.text.strip()
         
         if "Produtivo" in category:
@@ -111,10 +139,10 @@ def classify_email_gemini(text):
         elif "Improdutivo" in category:
             return 'Improdutivo'
         else:
-            print("Resposta do Gemini não reconhecida, usando fallback")
             return classify_email_fallback(text)
             
     except Exception as e:
+        print(f"Erro na classificação Gemini: {str(e)}")
         return classify_email_fallback(text)
 
 def classify_email_fallback(text):
@@ -130,11 +158,23 @@ def classify_email_fallback(text):
     else:
         return 'Improdutivo'
 
+@lru_cache(maxsize=100)
+def generate_gemini_response_cached(category, email_text):
+    # Geração de resposta com cache
+    text_hash = hashlib.md5(email_text.encode()).hexdigest()
+    print(f"Gerando resposta para {category} (hash: {text_hash[:8]}...)")
+    return generate_gemini_response(category, email_text)
+
 def generate_gemini_response(category, email_text):
     # Geração de resposta usando Gemini API
     try:
-        # Preparar o prompt baseado na categoria
         print(f"Tentando gerar resposta com Gemini para categoria: {category}")
+        
+        if not gemini_rate_limiter.allow_request():
+            print("⚠️  Rate limit próprio atingido para geração, usando fallback inteligente")
+            return generate_smart_fallback(category, email_text)
+        
+        # Preparar o prompt baseado na categoria
         if category == 'Produtivo':
             prompt = f"""
             Escreva uma resposta profissional e útil em português para o seguinte e-mail, 
@@ -154,22 +194,40 @@ def generate_gemini_response(category, email_text):
             Resposta:
             """
         
-    
-        print(f"Prompt enviado para Gemini: {prompt[:200]}...")  # Debug
-           
-           
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
-        
-        print(f"Resposta bruta do Gemini: {response.text}")  # Debug
         
         return response.text.strip()
         
     except Exception as e:
-        return generate_fallback_response(category)
+        print(f"Erro ao gerar resposta com Gemini: {str(e)}")
+        return generate_smart_fallback(category, email_text)
+
+def generate_smart_fallback(category, email_text):
+    # Respostas mais inteligentes baseadas no conteúdo do email
+    text_lower = email_text.lower()
+    
+    if category == 'Produtivo':
+        if any(word in text_lower for word in ['relatório', 'financeiro', 'trimestre', 'dados']):
+            return "Agradecemos sua solicitação do relatório financeiro. Estamos processando os dados e enviaremos em breve."
+        
+        elif any(word in text_lower for word in ['problema', 'erro', 'bug', 'não funciona', 'defeito']):
+            return "Entendemos o problema relatado. Nossa equipe técnica já foi acionada e entrará em contato para resolver a questão."
+        
+        elif any(word in text_lower for word in ['contrato', 'proposta', 'orçamento', 'comercial']):
+            return "Recebemos sua solicitação comercial. Nossa equipe de vendas analisará e retornará com as informações solicitadas."
+        
+        elif any(word in text_lower for word in ['fatura', 'pagamento', 'cobrança', 'boleto']):
+            return "Agradecemos o contato sobre questões financeiras. Nossa equipe fiscal responderá com as informações necessárias."
+        
+        elif any(word in text_lower for word in ['suporte', 'ajuda', 'dúvida', 'como fazer']):
+            return "Obrigado por entrar em contato com nosso suporte. Estamos analisando sua dúvida e retornaremos em breve."
+    
+    # Fallback genérico se não encontrar palavras-chave específicas
+    return generate_fallback_response(category)
 
 def generate_fallback_response(category):
-    # Resposta de fallback
+    # Resposta de fallback genérica
     if category == 'Produtivo':
         return "Agradecemos seu contato. Nossa equipe está analisando sua solicitação e retornaremos em breve."
     else:
@@ -204,8 +262,8 @@ def home():
             return render_template('index.html', error="Por favor, insira o texto do email ou envie um arquivo.")
 
         # Agora processa o texto normalmente
-        category = classify_email_gemini(email_text)
-        response = generate_gemini_response(category, email_text)
+        category = classify_email_gemini_cached(email_text)
+        response = generate_gemini_response_cached(category, email_text)
 
         return render_template('index.html',
                                email_text=email_text,
@@ -227,7 +285,6 @@ def classify():
     
     try:
         start_time = time.time()
-        print(f"email_text recebido: {email_text}")
 
         # Verificar se é um upload de arquivo
         if 'file' in request.files:
@@ -262,14 +319,10 @@ def classify():
             }), 400
         
         # Classificar email
-        category = classify_email_gemini(email_text)
-
-        print(f"Categoria classificada: {category}")
+        category = classify_email_gemini_cached(email_text)
 
         # Gerar resposta
-        response = generate_gemini_response(category, email_text)
-        
-        print(f"Resposta gerada: {response}")
+        response = generate_gemini_response_cached(category, email_text)
         
         processing_time = round(time.time() - start_time, 2)
         
@@ -299,7 +352,8 @@ def health_check():
         return jsonify({
             'status': 'healthy', 
             'gemini_connection': 'success',
-            'model': GEMINI_MODEL
+            'model': GEMINI_MODEL,
+            'remaining_requests': f"{45 - len(gemini_rate_limiter.requests)}/45"
         })
     except Exception as e:
         return jsonify({
